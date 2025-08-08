@@ -1,0 +1,293 @@
+# Configure the Azure Provider
+terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~>3.0"
+    }
+  }
+}
+
+# Configure the Microsoft Azure Provider
+provider "azurerm" {
+  features {}
+}
+
+# Create a resource group
+resource "azurerm_resource_group" "main" {
+  name     = var.resource_group_name
+  location = var.location
+
+  tags = {
+    environment = var.environment
+    project     = var.project_name
+  }
+}
+
+# Create a storage account for the function app
+resource "azurerm_storage_account" "function_storage" {
+  name                     = var.storage_account_name
+  resource_group_name      = azurerm_resource_group.main.name
+  location                 = azurerm_resource_group.main.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+
+  # Disable public access for security
+  allow_nested_items_to_be_public = false
+
+  tags = {
+    environment = var.environment
+    project     = var.project_name
+  }
+}
+
+# Create Log Analytics Workspace for Application Insights
+resource "azurerm_log_analytics_workspace" "function_workspace" {
+  name                = var.log_analytics_workspace_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+
+  tags = {
+    environment = var.environment
+    project     = var.project_name
+  }
+}
+
+# Create Application Insights for monitoring
+resource "azurerm_application_insights" "function_insights" {
+  name                = var.application_insights_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  application_type    = "web"
+  workspace_id        = azurerm_log_analytics_workspace.function_workspace.id
+
+  tags = {
+    environment = var.environment
+    project     = var.project_name
+  }
+}
+
+# Create an App Service Plan (B1 SKU)
+resource "azurerm_service_plan" "function_plan" {
+  name                = var.app_service_plan_name
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  os_type             = "Windows"
+  sku_name            = "B1"
+
+  tags = {
+    environment = var.environment
+    project     = var.project_name
+  }
+}
+
+# Create the Function App
+resource "azurerm_windows_function_app" "function_app" {
+  name                = var.function_app_name
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+
+  storage_account_name       = azurerm_storage_account.function_storage.name
+  storage_account_access_key = azurerm_storage_account.function_storage.primary_access_key
+  service_plan_id            = azurerm_service_plan.function_plan.id
+
+  site_config {
+    application_stack {
+      dotnet_version = "v8.0"
+    }
+    cors {
+      allowed_origins     = ["*"]
+      support_credentials = false
+    }
+  }
+
+  app_settings = {
+    "APPINSIGHTS_INSTRUMENTATIONKEY"        = azurerm_application_insights.function_insights.instrumentation_key
+    "APPLICATIONINSIGHTS_CONNECTION_STRING" = azurerm_application_insights.function_insights.connection_string
+    "FUNCTIONS_WORKER_RUNTIME"              = "dotnet-isolated"
+    "WEBSITE_RUN_FROM_PACKAGE"              = "1"
+    "FUNCTIONS_EXTENSION_VERSION"           = "~4"
+  }
+
+  tags = {
+    environment = var.environment
+    project     = var.project_name
+  }
+}
+
+resource "null_resource" "deploy_sample_zip_windows_fnapp" {
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-ExecutionPolicy", "Bypass", "-Command"]
+    command     = <<EOT
+      # Set error action preference to stop on errors
+      $ErrorActionPreference = "Stop"
+
+      Write-Output "Starting Function App deployment process..."
+
+      # Set the Azure subscription context
+      Write-Output "Setting Azure subscription context..."
+      az account set --subscription "${var.subscription_id}"
+      if ($LASTEXITCODE -ne 0) { 
+        Write-Error "Failed to set Azure subscription context"
+        exit 1 
+      }
+
+      # Build the .NET Function App
+      Write-Output "Building .NET Function App..."
+      Set-Location ".\FunctionApp"
+      
+      # Verify the function files exist
+      Write-Output "Checking function files..."
+      if (-not (Test-Path "HelloWorldFunction.cs")) {
+        Write-Error "HelloWorldFunction.cs not found in FunctionApp directory"
+        exit 1
+      }
+      if (-not (Test-Path "FunctionApp.csproj")) {
+        Write-Error "FunctionApp.csproj not found in FunctionApp directory"
+        exit 1
+      }
+      
+      dotnet restore
+      if ($LASTEXITCODE -ne 0) { 
+        Write-Error "dotnet restore failed"
+        exit 1 
+      }
+
+      dotnet publish -c Release -o ..\publish
+      if ($LASTEXITCODE -ne 0) { 
+        Write-Error "dotnet publish failed"
+        exit 1 
+      }
+      
+      # Verify publish output
+      Set-Location ".."
+      Write-Output "Checking publish directory contents..."
+      Get-ChildItem -Path ".\publish" -Recurse | Format-Table Name, Length, LastWriteTime
+
+      # Create deployment package using .NET compression (more reliable)
+      Write-Output "Creating deployment package using .NET compression..."
+      try {
+        # Load the compression assembly
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+        # Remove existing zip if it exists
+        if (Test-Path ".\functionapp.zip") { 
+          Remove-Item ".\functionapp.zip" -Force 
+        }
+
+        # Create the zip file
+        $publishPath = Join-Path (Get-Location) "publish"
+        $zipPath = Join-Path (Get-Location) "functionapp.zip"
+
+        if (-not (Test-Path $publishPath)) {
+          Write-Error "Publish directory not found: $publishPath"
+          exit 1
+        }
+
+        [System.IO.Compression.ZipFile]::CreateFromDirectory($publishPath, $zipPath)
+
+        Write-Output "Deployment package created successfully: $zipPath"
+      } catch {
+        Write-Error "Failed to create deployment package: $($_.Exception.Message)"
+        exit 1
+      }
+
+      # Verify the zip file was created
+      if (-not (Test-Path ".\functionapp.zip")) {
+        Write-Error "Deployment package was not created successfully"
+        exit 1
+      }
+
+      # Deploy to Azure Function App
+      Write-Output "Deploying to Azure Function App..."
+      az functionapp deployment source config-zip --name ${azurerm_windows_function_app.function_app.name} --resource-group ${azurerm_resource_group.main.name} --src ".\functionapp.zip"
+
+      if ($LASTEXITCODE -ne 0) { 
+        Write-Error "Function App deployment failed"
+        exit 1 
+      }
+      
+      # Verify deployment succeeded using alternative methods
+      Write-Output "Verifying deployment..."
+      
+      # Check if the function app is running
+      $appStatus = az functionapp show --name ${azurerm_windows_function_app.function_app.name} --resource-group ${azurerm_resource_group.main.name} --query "state" --output tsv
+      Write-Output "Function App state: $appStatus"
+      
+      # Get function app configuration to verify runtime settings
+      $runtimeVersion = az functionapp config show --name ${azurerm_windows_function_app.function_app.name} --resource-group ${azurerm_resource_group.main.name} --query "netFrameworkVersion" --output tsv
+      Write-Output "Runtime version: $runtimeVersion"
+
+      # Wait for deployment to complete
+      Write-Output "Waiting for deployment to complete..."
+      Start-Sleep -Seconds 60
+
+      # Check deployment status and list functions
+      Write-Output "Checking function app status and listing functions..."
+      
+      # List all functions in the function app
+      Write-Output "Listing functions..."
+      az functionapp function list --name ${azurerm_windows_function_app.function_app.name} --resource-group ${azurerm_resource_group.main.name} --output table
+      
+      # Check if HelloWorld function specifically exists
+      $functionExists = az functionapp function show --name ${azurerm_windows_function_app.function_app.name} --resource-group ${azurerm_resource_group.main.name} --function-name "HelloWorld" --query "name" --output tsv 2>$null
+      if ($functionExists) {
+        Write-Output "HelloWorld function found: $functionExists"
+      } else {
+        Write-Warning "HelloWorld function not found in function app"
+      }
+      
+      # Check the function app's default document and site status
+      $siteStatus = az functionapp show --name ${azurerm_windows_function_app.function_app.name} --resource-group ${azurerm_resource_group.main.name} --query "{state:state, availabilityState:availabilityState, defaultHostName:defaultHostName}" --output json | ConvertFrom-Json
+      Write-Output "Site Status: $($siteStatus.state), Availability: $($siteStatus.availabilityState)"
+      Write-Output "Default Host Name: $($siteStatus.defaultHostName)"
+
+      # Test the function (this may fail if behind private endpoints)
+      Write-Output "Testing deployed function..."
+      try {
+        # Since we set AuthorizationLevel.Anonymous, test without function key first
+        $functionUrl = "https://${azurerm_windows_function_app.function_app.default_hostname}/api/HelloWorld"
+        Write-Output "Testing anonymous function at: $functionUrl"
+        $response = Invoke-RestMethod -Uri $functionUrl -UseBasicParsing -TimeoutSec 60
+        Write-Output "Function test successful: $response"
+      } catch {
+        Write-Warning "Anonymous function test failed: $($_.Exception.Message)"
+        
+        # Try to get more detailed error information
+        Write-Output "Attempting to get detailed error information..."
+        try {
+          $detailedResponse = Invoke-WebRequest -Uri $functionUrl -UseBasicParsing -TimeoutSec 60
+          Write-Output "HTTP Status Code: $($detailedResponse.StatusCode)"
+          Write-Output "Response Content: $($detailedResponse.Content)"
+        } catch {
+          Write-Output "Detailed error: $($_.Exception.Message)"
+        }
+        
+        # Check function app logs
+        Write-Output "Checking recent function app logs..."
+        az functionapp logs tail --name ${azurerm_windows_function_app.function_app.name} --resource-group ${azurerm_resource_group.main.name} --timeout 10
+        
+        Write-Output "Manual testing URLs:"
+        Write-Output "- Anonymous: https://${azurerm_windows_function_app.function_app.default_hostname}/api/HelloWorld"
+        Write-Output "- Admin: https://${azurerm_windows_function_app.function_app.name}.scm.azurewebsites.net/"
+      }
+
+      # Cleanup
+      Write-Output "Cleaning up temporary files..."
+      Remove-Item -Path ".\publish" -Recurse -Force -ErrorAction SilentlyContinue
+      Remove-Item -Path ".\functionapp.zip" -Force -ErrorAction SilentlyContinue
+
+      Write-Output "Deployment completed successfully!"
+    EOT
+  }
+  triggers = {
+    always_run = timestamp()
+  }
+
+  depends_on = [
+    azurerm_windows_function_app.function_app,
+    azurerm_storage_account.function_storage
+  ]
+}
