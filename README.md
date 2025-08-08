@@ -1,0 +1,1 @@
+# terraform-azfunction-private-sample
