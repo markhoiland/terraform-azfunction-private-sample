@@ -90,6 +90,7 @@ resource "azurerm_storage_account" "function_storage" {
   sftp_enabled             = false
   # Disable public access for security
   allow_nested_items_to_be_public = false
+  cross_tenant_replication_enabled = false
 
   identity {
     type         = "UserAssigned"
@@ -184,7 +185,8 @@ resource "azurerm_windows_function_app" "function_app" {
   storage_uses_managed_identity = true
   service_plan_id               = azurerm_service_plan.function_plan.id
   enabled                       = true
-  virtual_network_subnet_id = data.azurerm_subnet.function_app_injection_subnet.id
+  virtual_network_subnet_id     = data.azurerm_subnet.function_app_injection_subnet.id
+  functions_extension_version   = "~4"
 
   identity {
     type         = "UserAssigned"
@@ -192,11 +194,14 @@ resource "azurerm_windows_function_app" "function_app" {
   }
 
   site_config {
-    minimum_tls_version     = "1.2"
-    ftps_state              = "FtpsOnly"
-    scm_minimum_tls_version = "1.2"
-    always_on               = true
-    http2_enabled           = true
+    minimum_tls_version                    = "1.2"
+    ftps_state                             = "FtpsOnly"
+    scm_minimum_tls_version                = "1.2"
+    always_on                              = true
+    http2_enabled                          = true
+    application_insights_key               = azurerm_application_insights.function_insights.instrumentation_key
+    application_insights_connection_string = azurerm_application_insights.function_insights.connection_string
+
     application_stack {
       dotnet_version = "v8.0"
     }
@@ -208,14 +213,14 @@ resource "azurerm_windows_function_app" "function_app" {
   }
 
   app_settings = {
-    "APPINSIGHTS_INSTRUMENTATIONKEY"        = azurerm_application_insights.function_insights.instrumentation_key
-    "APPLICATIONINSIGHTS_CONNECTION_STRING" = azurerm_application_insights.function_insights.connection_string
-    "FUNCTIONS_WORKER_RUNTIME"              = "dotnet-isolated"
-    "WEBSITE_RUN_FROM_PACKAGE"              = "1"
-    "FUNCTIONS_EXTENSION_VERSION"           = "~4"
-    "AzureWebJobs__disableAnonymousAuth"    = "true"
-    "AzureWebJobsStorage__accountName"      = azurerm_storage_account.function_storage.name
-    "AzureWebJobsStorage__blobServiceUri"   = "https://${azurerm_storage_account.function_storage.name}.blob.core.windows.net"
+    # "APPINSIGHTS_INSTRUMENTATIONKEY"        = azurerm_application_insights.function_insights.instrumentation_key
+    # "APPLICATIONINSIGHTS_CONNECTION_STRING" = azurerm_application_insights.function_insights.connection_string
+    "FUNCTIONS_WORKER_RUNTIME" = "dotnet-isolated"
+    "WEBSITE_RUN_FROM_PACKAGE" = "1"
+    # "FUNCTIONS_EXTENSION_VERSION"           = "~4"
+    "AzureWebJobs__disableAnonymousAuth"  = "true"
+    # "AzureWebJobsStorage__accountName"    = azurerm_storage_account.function_storage.name
+    "AzureWebJobsStorage__blobServiceUri" = "https://${azurerm_storage_account.function_storage.name}.blob.core.windows.net"
     # "AzureWebJobsStorage__queueServiceUri"  = "https://${azurerm_storage_account.function_storage.name}.queue.core.windows.net"
     # "AzureWebJobsStorage__tableServiceUri"  = "https://${azurerm_storage_account.function_storage.name}.table.core.windows.net"
     # "AzureWebJobsStorage__fileServiceUri"   = "https://${azurerm_storage_account.function_storage.name}.file.core.windows.net"
@@ -272,7 +277,7 @@ resource "null_resource" "deploy_sample_zip_windows_fnapp" {
       # Build the .NET Function App
       Write-Output "Building .NET Function App..."
       Set-Location ".\FunctionApp"
-      
+
       # Verify the function files exist
       Write-Output "Checking function files..."
       if (-not (Test-Path "HelloWorldFunction.cs")) {
@@ -283,7 +288,7 @@ resource "null_resource" "deploy_sample_zip_windows_fnapp" {
         Write-Error "FunctionApp.csproj not found in FunctionApp directory"
         exit 1
       }
-      
+
       dotnet restore
       if ($LASTEXITCODE -ne 0) { 
         Write-Error "dotnet restore failed"
@@ -295,7 +300,7 @@ resource "null_resource" "deploy_sample_zip_windows_fnapp" {
         Write-Error "dotnet publish failed"
         exit 1 
       }
-      
+
       # Verify publish output
       Set-Location ".."
       Write-Output "Checking publish directory contents..."
@@ -343,14 +348,14 @@ resource "null_resource" "deploy_sample_zip_windows_fnapp" {
         Write-Error "Function App deployment failed"
         exit 1 
       }
-      
+
       # Verify deployment succeeded using alternative methods
       Write-Output "Verifying deployment..."
-      
+
       # Check if the function app is running
       $appStatus = az functionapp show --name ${azurerm_windows_function_app.function_app.name} --resource-group ${azurerm_resource_group.main.name} --query "state" --output tsv
       Write-Output "Function App state: $appStatus"
-      
+
       # Get function app configuration to verify runtime settings
       $runtimeVersion = az functionapp config show --name ${azurerm_windows_function_app.function_app.name} --resource-group ${azurerm_resource_group.main.name} --query "netFrameworkVersion" --output tsv
       Write-Output "Runtime version: $runtimeVersion"
@@ -361,11 +366,11 @@ resource "null_resource" "deploy_sample_zip_windows_fnapp" {
 
       # Check deployment status and list functions
       Write-Output "Checking function app status and listing functions..."
-      
+
       # List all functions in the function app
       Write-Output "Listing functions..."
       az functionapp function list --name ${azurerm_windows_function_app.function_app.name} --resource-group ${azurerm_resource_group.main.name} --output table
-      
+
       # Check if HelloWorld function specifically exists
       $functionExists = az functionapp function show --name ${azurerm_windows_function_app.function_app.name} --resource-group ${azurerm_resource_group.main.name} --function-name "HelloWorld" --query "name" --output tsv 2>$null
       if ($functionExists) {
@@ -373,7 +378,7 @@ resource "null_resource" "deploy_sample_zip_windows_fnapp" {
       } else {
         Write-Warning "HelloWorld function not found in function app"
       }
-      
+
       # Check the function app's default document and site status
       $siteStatus = az functionapp show --name ${azurerm_windows_function_app.function_app.name} --resource-group ${azurerm_resource_group.main.name} --query "{state:state, availabilityState:availabilityState, defaultHostName:defaultHostName}" --output json | ConvertFrom-Json
       Write-Output "Site Status: $($siteStatus.state), Availability: $($siteStatus.availabilityState)"
@@ -389,7 +394,7 @@ resource "null_resource" "deploy_sample_zip_windows_fnapp" {
         Write-Output "Function test successful: $response"
       } catch {
         Write-Warning "Anonymous function test failed: $($_.Exception.Message)"
-        
+
         # Try to get more detailed error information
         Write-Output "Attempting to get detailed error information..."
         try {
@@ -399,11 +404,11 @@ resource "null_resource" "deploy_sample_zip_windows_fnapp" {
         } catch {
           Write-Output "Detailed error: $($_.Exception.Message)"
         }
-        
+
         # Check function app logs
         Write-Output "Checking recent function app logs..."
         az functionapp logs tail --name ${azurerm_windows_function_app.function_app.name} --resource-group ${azurerm_resource_group.main.name} --timeout 10
-        
+
         Write-Output "Manual testing URLs:"
         Write-Output "- Anonymous: https://${azurerm_windows_function_app.function_app.default_hostname}/api/HelloWorld"
         Write-Output "- Admin: https://${azurerm_windows_function_app.function_app.name}.scm.azurewebsites.net/"
@@ -423,6 +428,8 @@ resource "null_resource" "deploy_sample_zip_windows_fnapp" {
 
   depends_on = [
     azurerm_windows_function_app.function_app,
-    azurerm_storage_account.function_storage
+    azurerm_storage_account.function_storage,
+    azurerm_private_endpoint.function_app_pep,
+    azurerm_private_endpoint.storage_blob_pep
   ]
 }

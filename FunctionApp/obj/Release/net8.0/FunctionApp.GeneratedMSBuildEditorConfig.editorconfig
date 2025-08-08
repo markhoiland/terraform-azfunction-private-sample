@@ -15,6 +15,6 @@ build_property.PlatformNeutralAssembly =
 build_property.EnforceExtendedAnalyzerRules = 
 build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property.RootNamespace = FunctionApp
-build_property.ProjectDir = C:\Source\IaC\terraform-azfunction-private-sample\terraform-azfunction-private-sample\FunctionApp\
+build_property.ProjectDir = C:\Source\terraform-azfunction-private-sample\FunctionApp\
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 

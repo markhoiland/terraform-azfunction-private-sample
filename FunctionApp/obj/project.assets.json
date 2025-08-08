@@ -4282,19 +4282,19 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\markhoiland\\.nuget\\packages\\": {}
+    "C:\\Users\\localadmin\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Source\\IaC\\terraform-azfunction-private-sample\\terraform-azfunction-private-sample\\FunctionApp\\FunctionApp.csproj",
+      "projectUniqueName": "C:\\Source\\terraform-azfunction-private-sample\\FunctionApp\\FunctionApp.csproj",
       "projectName": "FunctionApp",
-      "projectPath": "C:\\Source\\IaC\\terraform-azfunction-private-sample\\terraform-azfunction-private-sample\\FunctionApp\\FunctionApp.csproj",
-      "packagesPath": "C:\\Users\\markhoiland\\.nuget\\packages\\",
-      "outputPath": "C:\\Source\\IaC\\terraform-azfunction-private-sample\\terraform-azfunction-private-sample\\FunctionApp\\obj\\",
+      "projectPath": "C:\\Source\\terraform-azfunction-private-sample\\FunctionApp\\FunctionApp.csproj",
+      "packagesPath": "C:\\Users\\localadmin\\.nuget\\packages\\",
+      "outputPath": "C:\\Source\\terraform-azfunction-private-sample\\FunctionApp\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\markhoiland\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "C:\\Users\\localadmin\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
@@ -4360,7 +4360,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.316/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.413/PortableRuntimeIdentifierGraph.json"
       }
     }
   }
