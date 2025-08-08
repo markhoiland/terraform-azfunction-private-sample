@@ -184,6 +184,7 @@ resource "azurerm_windows_function_app" "function_app" {
   storage_uses_managed_identity = true
   service_plan_id               = azurerm_service_plan.function_plan.id
   enabled                       = true
+  virtual_network_subnet_id = data.azurerm_subnet.function_app_injection_subnet.id
 
   identity {
     type         = "UserAssigned"
@@ -204,7 +205,6 @@ resource "azurerm_windows_function_app" "function_app" {
       support_credentials = false
     }
     vnet_route_all_enabled = true
-    subnet_id              = data.azurerm_subnet.function_app_injection_subnet.id
   }
 
   app_settings = {
