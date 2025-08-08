@@ -72,3 +72,23 @@ variable "function_app_name" {
     error_message = "Function app name must be between 2 and 60 characters long, start and end with alphanumeric characters, and can contain hyphens."
   }
 }
+
+variable "subnet_resource_group_name" {
+  description = "The name of the resource group containing the private endpoints subnet"
+  type        = string
+}
+
+variable "virtual_network_name" {
+  description = "The name of the virtual network containing the subnets"
+  type        = string
+}
+
+variable "pep_subnet_name" {
+  description = "The name of the subnet for private endpoints"
+  type        = string
+}
+
+variable "function_app_injection_subnet_name" {
+  description = "The name of the subnet for function app VNet integration (injection)"
+  type        = string
+}

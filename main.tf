@@ -1,6 +1,32 @@
 # Gather client configuration
 data "azurerm_client_config" "current" {}
 
+# Reference existing subnet for private endpoints
+data "azurerm_subnet" "private_endpoints_subnet" {
+  name                 = var.pep_subnet_name
+  virtual_network_name = var.virtual_network_name
+  resource_group_name  = var.subnet_resource_group_name
+}
+
+# Reference existing subnet for function app VNet integration (injection)
+data "azurerm_subnet" "function_app_injection_subnet" {
+  name                 = var.function_app_injection_subnet_name
+  virtual_network_name = var.virtual_network_name
+  resource_group_name  = var.subnet_resource_group_name
+}
+
+# Reference existing private DNS zone for blob storage
+data "azurerm_private_dns_zone" "blob_storage_dns_zone" {
+  name                = "privatelink.blob.core.windows.net"
+  resource_group_name = var.subnet_resource_group_name
+}
+
+# Reference existing private DNS zone for function app
+data "azurerm_private_dns_zone" "function_app_dns_zone" {
+  name                = "privatelink.azurewebsites.net"
+  resource_group_name = var.subnet_resource_group_name
+}
+
 # Create a resource group
 resource "azurerm_resource_group" "main" {
   name     = var.resource_group_name
@@ -72,9 +98,33 @@ resource "azurerm_storage_account" "function_storage" {
 
   network_rules {
     bypass                     = ["AzureServices"]
-    default_action             = "Allow"
+    default_action             = "Deny"
     ip_rules                   = []
     virtual_network_subnet_ids = []
+  }
+
+  tags = {
+    environment = var.environment
+    project     = var.project_name
+  }
+}
+
+resource "azurerm_private_endpoint" "storage_blob_pep" {
+  name                = "${var.storage_account_name}-blob-pep"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  subnet_id           = data.azurerm_subnet.private_endpoints_subnet.id
+
+  private_service_connection {
+    name                           = "${var.storage_account_name}-blob-psc"
+    private_connection_resource_id = azurerm_storage_account.function_storage.id
+    subresource_names              = ["blob"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "blob-dns-zone-group"
+    private_dns_zone_ids = [data.azurerm_private_dns_zone.blob_storage_dns_zone.id]
   }
 
   tags = {
@@ -127,13 +177,13 @@ resource "azurerm_service_plan" "function_plan" {
 
 # Create the Windows Function App
 resource "azurerm_windows_function_app" "function_app" {
-  name                       = var.function_app_name
-  resource_group_name        = azurerm_resource_group.main.name
-  location                   = azurerm_resource_group.main.location
-  storage_account_name       = azurerm_storage_account.function_storage.name
+  name                          = var.function_app_name
+  resource_group_name           = azurerm_resource_group.main.name
+  location                      = azurerm_resource_group.main.location
+  storage_account_name          = azurerm_storage_account.function_storage.name
   storage_uses_managed_identity = true
-  service_plan_id            = azurerm_service_plan.function_plan.id
-  enabled                    = true
+  service_plan_id               = azurerm_service_plan.function_plan.id
+  enabled                       = true
 
   identity {
     type         = "UserAssigned"
@@ -153,6 +203,8 @@ resource "azurerm_windows_function_app" "function_app" {
       allowed_origins     = ["*"]
       support_credentials = false
     }
+    vnet_route_all_enabled = true
+    subnet_id              = data.azurerm_subnet.function_app_injection_subnet.id
   }
 
   app_settings = {
@@ -168,6 +220,30 @@ resource "azurerm_windows_function_app" "function_app" {
     # "AzureWebJobsStorage__tableServiceUri"  = "https://${azurerm_storage_account.function_storage.name}.table.core.windows.net"
     # "AzureWebJobsStorage__fileServiceUri"   = "https://${azurerm_storage_account.function_storage.name}.file.core.windows.net"
     "AzureWebJobsStorage__credential" = "ManagedIdentity"
+  }
+
+  tags = {
+    environment = var.environment
+    project     = var.project_name
+  }
+}
+
+resource "azurerm_private_endpoint" "function_app_pep" {
+  name                = "${var.function_app_name}-pep"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  subnet_id           = data.azurerm_subnet.private_endpoints_subnet.id
+
+  private_service_connection {
+    name                           = "${var.function_app_name}-psc"
+    private_connection_resource_id = azurerm_windows_function_app.function_app.id
+    subresource_names              = ["sites"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "functionapp-dns-zone-group"
+    private_dns_zone_ids = [data.azurerm_private_dns_zone.function_app_dns_zone.id]
   }
 
   tags = {
