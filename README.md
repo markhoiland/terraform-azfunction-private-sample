@@ -33,6 +33,30 @@ The following Azure resources are created:
 - **Azure CLI**: Logged in and set to the correct subscription
 - **.NET 8 SDK**: For building and publishing the Function App code
 
+## Required Variables for `terraform.tfvars`
+
+Copy and fill in these variables in your `terraform.tfvars` file:
+
+```hcl
+resource_group_name              = "<your-resource-group-name>"
+subscription_id                  = "<your-subscription-id>"
+location                         = "<azure-region>"
+environment                      = "<environment-name>"
+project_name                     = "<project-name>"
+managed_identity_name            = "<managed-identity-name>"
+storage_account_name             = "<storage-account-name>" # 3-24 lowercase letters/numbers
+application_insights_name        = "<app-insights-name>"
+log_analytics_workspace_name     = "<log-analytics-workspace-name>"
+app_service_plan_name            = "<app-service-plan-name>"
+function_app_name                = "<function-app-name>" # 2-60 chars, alphanumeric or hyphens, start/end with alphanumeric
+subnet_resource_group_name       = "<subnet-resource-group-name>"
+virtual_network_name             = "<vnet-name>"
+pep_subnet_name                  = "<private-endpoint-subnet-name>"
+function_app_injection_subnet_name = "<function-app-injection-subnet-name>"
+```
+
+All variables are required and must be set for a successful deployment.
+
 ## Usage
 
 1. Clone this repository.
