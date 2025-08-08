@@ -213,17 +213,10 @@ resource "azurerm_windows_function_app" "function_app" {
   }
 
   app_settings = {
-    # "APPINSIGHTS_INSTRUMENTATIONKEY"        = azurerm_application_insights.function_insights.instrumentation_key
-    # "APPLICATIONINSIGHTS_CONNECTION_STRING" = azurerm_application_insights.function_insights.connection_string
     "FUNCTIONS_WORKER_RUNTIME" = "dotnet-isolated"
     "WEBSITE_RUN_FROM_PACKAGE" = "1"
-    # "FUNCTIONS_EXTENSION_VERSION"           = "~4"
     "AzureWebJobs__disableAnonymousAuth"  = "true"
-    # "AzureWebJobsStorage__accountName"    = azurerm_storage_account.function_storage.name
     "AzureWebJobsStorage__blobServiceUri" = "https://${azurerm_storage_account.function_storage.name}.blob.core.windows.net"
-    # "AzureWebJobsStorage__queueServiceUri"  = "https://${azurerm_storage_account.function_storage.name}.queue.core.windows.net"
-    # "AzureWebJobsStorage__tableServiceUri"  = "https://${azurerm_storage_account.function_storage.name}.table.core.windows.net"
-    # "AzureWebJobsStorage__fileServiceUri"   = "https://${azurerm_storage_account.function_storage.name}.file.core.windows.net"
     "AzureWebJobsStorage__credential" = "ManagedIdentity"
   }
 
