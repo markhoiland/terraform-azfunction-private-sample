@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Source\\IaC\\KLA\\azexport\\tftest\\FunctionApp\\FunctionApp.csproj": {}
+    "C:\\Source\\IaC\\terraform-azfunction-private-sample\\terraform-azfunction-private-sample\\FunctionApp\\FunctionApp.csproj": {}
   },
   "projects": {
-    "C:\\Source\\IaC\\KLA\\azexport\\tftest\\FunctionApp\\FunctionApp.csproj": {
+    "C:\\Source\\IaC\\terraform-azfunction-private-sample\\terraform-azfunction-private-sample\\FunctionApp\\FunctionApp.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Source\\IaC\\KLA\\azexport\\tftest\\FunctionApp\\FunctionApp.csproj",
+        "projectUniqueName": "C:\\Source\\IaC\\terraform-azfunction-private-sample\\terraform-azfunction-private-sample\\FunctionApp\\FunctionApp.csproj",
         "projectName": "FunctionApp",
-        "projectPath": "C:\\Source\\IaC\\KLA\\azexport\\tftest\\FunctionApp\\FunctionApp.csproj",
+        "projectPath": "C:\\Source\\IaC\\terraform-azfunction-private-sample\\terraform-azfunction-private-sample\\FunctionApp\\FunctionApp.csproj",
         "packagesPath": "C:\\Users\\markhoiland\\.nuget\\packages\\",
-        "outputPath": "C:\\Source\\IaC\\KLA\\azexport\\tftest\\FunctionApp\\obj\\",
+        "outputPath": "C:\\Source\\IaC\\terraform-azfunction-private-sample\\terraform-azfunction-private-sample\\FunctionApp\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\markhoiland\\AppData\\Roaming\\NuGet\\NuGet.Config"

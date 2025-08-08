@@ -1,17 +1,5 @@
-# Configure the Azure Provider
-terraform {
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~>3.0"
-    }
-  }
-}
-
-# Configure the Microsoft Azure Provider
-provider "azurerm" {
-  features {}
-}
+# Gather client configuration
+data "azurerm_client_config" "current" {}
 
 # Create a resource group
 resource "azurerm_resource_group" "main" {
@@ -24,6 +12,47 @@ resource "azurerm_resource_group" "main" {
   }
 }
 
+# Create User-Assigned Managed Identity for Function App to use to access Storage
+resource "azurerm_user_assigned_identity" "uami" {
+  location            = var.location
+  name                = var.managed_identity_name
+  resource_group_name = azurerm_resource_group.main.name
+
+  tags = {
+    environment = var.environment
+    project     = var.project_name
+  }
+}
+
+# Assign required RBAC permissions
+# Assign the "Storage Account Contributor" role to the current user for the Storage Account
+resource "azurerm_role_assignment" "current_user_storage_account_contributor" {
+  scope                = azurerm_resource_group.main.id
+  role_definition_name = "Storage Account Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+# Assign the "Storage Blob Data Owner" role to the current user for the Storage Account
+resource "azurerm_role_assignment" "current_user_storage_blob_data_owner" {
+  scope                = azurerm_resource_group.main.id
+  role_definition_name = "Storage Blob Data Owner"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+# Assign the "Storage Account Contributor" role to the Managed Identity for the Storage Account
+resource "azurerm_role_assignment" "uami_storage_account_contributor" {
+  scope                = azurerm_resource_group.main.id
+  role_definition_name = "Storage Account Contributor"
+  principal_id         = azurerm_user_assigned_identity.uami.principal_id
+}
+
+# Assign the "Storage Blob Data Owner" role to the Managed Identity for the Storage Account
+resource "azurerm_role_assignment" "uami_storage_blob_data_owner" {
+  scope                = azurerm_resource_group.main.id
+  role_definition_name = "Storage Blob Data Owner"
+  principal_id         = azurerm_user_assigned_identity.uami.principal_id
+}
+
 # Create a storage account for the function app
 resource "azurerm_storage_account" "function_storage" {
   name                     = var.storage_account_name
@@ -31,9 +60,22 @@ resource "azurerm_storage_account" "function_storage" {
   location                 = azurerm_resource_group.main.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
-
+  min_tls_version          = "TLS1_2"
+  sftp_enabled             = false
   # Disable public access for security
   allow_nested_items_to_be_public = false
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.uami.id]
+  }
+
+  network_rules {
+    bypass                     = ["AzureServices"]
+    default_action             = "Allow"
+    ip_rules                   = []
+    virtual_network_subnet_ids = []
+  }
 
   tags = {
     environment = var.environment
@@ -83,17 +125,27 @@ resource "azurerm_service_plan" "function_plan" {
   }
 }
 
-# Create the Function App
+# Create the Windows Function App
 resource "azurerm_windows_function_app" "function_app" {
-  name                = var.function_app_name
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
-
+  name                       = var.function_app_name
+  resource_group_name        = azurerm_resource_group.main.name
+  location                   = azurerm_resource_group.main.location
   storage_account_name       = azurerm_storage_account.function_storage.name
-  storage_account_access_key = azurerm_storage_account.function_storage.primary_access_key
+  storage_uses_managed_identity = true
   service_plan_id            = azurerm_service_plan.function_plan.id
+  enabled                    = true
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.uami.id]
+  }
 
   site_config {
+    minimum_tls_version     = "1.2"
+    ftps_state              = "FtpsOnly"
+    scm_minimum_tls_version = "1.2"
+    always_on               = true
+    http2_enabled           = true
     application_stack {
       dotnet_version = "v8.0"
     }
@@ -109,6 +161,13 @@ resource "azurerm_windows_function_app" "function_app" {
     "FUNCTIONS_WORKER_RUNTIME"              = "dotnet-isolated"
     "WEBSITE_RUN_FROM_PACKAGE"              = "1"
     "FUNCTIONS_EXTENSION_VERSION"           = "~4"
+    "AzureWebJobs__disableAnonymousAuth"    = "true"
+    "AzureWebJobsStorage__accountName"      = azurerm_storage_account.function_storage.name
+    "AzureWebJobsStorage__blobServiceUri"   = "https://${azurerm_storage_account.function_storage.name}.blob.core.windows.net"
+    # "AzureWebJobsStorage__queueServiceUri"  = "https://${azurerm_storage_account.function_storage.name}.queue.core.windows.net"
+    # "AzureWebJobsStorage__tableServiceUri"  = "https://${azurerm_storage_account.function_storage.name}.table.core.windows.net"
+    # "AzureWebJobsStorage__fileServiceUri"   = "https://${azurerm_storage_account.function_storage.name}.file.core.windows.net"
+    "AzureWebJobsStorage__credential" = "ManagedIdentity"
   }
 
   tags = {

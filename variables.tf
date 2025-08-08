@@ -1,7 +1,7 @@
 variable "resource_group_name" {
   description = "The name of the resource group"
   type        = string
-  default     = "rg-function-app"
+  default     = "rg-function-app-01"
 }
 
 variable "subscription_id" {
@@ -25,6 +25,12 @@ variable "project_name" {
   description = "The name of the project"
   type        = string
   default     = "azure-function"
+}
+
+variable "managed_identity_name" {
+  description = "The name of the User-Assigned Managed Identity"
+  type        = string
+  default     = "uami-function-app"
 }
 
 variable "storage_account_name" {
