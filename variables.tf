@@ -80,3 +80,8 @@ variable "function_app_injection_subnet_name" {
   description = "The name of the subnet for function app VNet integration (injection)"
   type        = string
 }
+
+variable "devops_agent_subnet_name" {
+  description = "The name of the subnet for DevOps hosted agents/runners"
+  type        = string
+}

@@ -15,6 +15,13 @@ data "azurerm_subnet" "function_app_injection_subnet" {
   resource_group_name  = var.subnet_resource_group_name
 }
 
+# Reference existing subnet for DevOps hosted agents/runners (if required)
+data "azurerm_subnet" "devops_agent_subnet" {
+  name                 = var.devops_agent_subnet_name
+  virtual_network_name = var.virtual_network_name
+  resource_group_name  = var.subnet_resource_group_name
+}
+
 # Reference existing private DNS zone for blob storage
 data "azurerm_private_dns_zone" "blob_storage_dns_zone" {
   name                = "privatelink.blob.core.windows.net"
@@ -89,7 +96,7 @@ resource "azurerm_storage_account" "function_storage" {
   min_tls_version          = "TLS1_2"
   sftp_enabled             = false
   # Disable public access for security
-  allow_nested_items_to_be_public = false
+  allow_nested_items_to_be_public  = false
   cross_tenant_replication_enabled = false
 
   identity {
@@ -101,7 +108,11 @@ resource "azurerm_storage_account" "function_storage" {
     bypass                     = ["AzureServices"]
     default_action             = "Deny"
     ip_rules                   = []
-    virtual_network_subnet_ids = []
+    virtual_network_subnet_ids = [
+      data.azurerm_subnet.private_endpoints_subnet.id,
+      data.azurerm_subnet.function_app_injection_subnet.id,
+      data.azurerm_subnet.devops_agent_subnet.id
+    ]
   }
 
   tags = {
@@ -185,6 +196,7 @@ resource "azurerm_windows_function_app" "function_app" {
   storage_uses_managed_identity = true
   service_plan_id               = azurerm_service_plan.function_plan.id
   enabled                       = true
+  public_network_access_enabled = false
   virtual_network_subnet_id     = data.azurerm_subnet.function_app_injection_subnet.id
   functions_extension_version   = "~4"
 
@@ -213,11 +225,11 @@ resource "azurerm_windows_function_app" "function_app" {
   }
 
   app_settings = {
-    "FUNCTIONS_WORKER_RUNTIME" = "dotnet-isolated"
-    "WEBSITE_RUN_FROM_PACKAGE" = "1"
+    "FUNCTIONS_WORKER_RUNTIME"            = "dotnet-isolated"
+    "WEBSITE_RUN_FROM_PACKAGE"            = "1"
     "AzureWebJobs__disableAnonymousAuth"  = "true"
     "AzureWebJobsStorage__blobServiceUri" = "https://${azurerm_storage_account.function_storage.name}.blob.core.windows.net"
-    "AzureWebJobsStorage__credential" = "ManagedIdentity"
+    "AzureWebJobsStorage__credential"     = "ManagedIdentity"
   }
 
   tags = {
